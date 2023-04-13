@@ -1,46 +1,50 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include <pcl/io/ply_io.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include "cnpy.h"
 #include "visualize.h"
 
-using namespace std;
+void visualize_points(const std::string& npz_filename,
+											pcl::visualization::PCLVisualizer::Ptr viewer,
+											pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
+  // Load point cloud data from npz file
+  try {
+    // Load positions from the npz file
+    cnpy::npz_t npz = cnpy::npz_load(npz_filename);
+		size_t num_points = npz["x"].shape[0];
+		
+		int32_t* xs = npz["x"].data<int32_t>();
+		int32_t* ys = npz["y"].data<int32_t>();
+		int32_t* zs = npz["z"].data<int32_t>();
+    uint16_t* rs = npz["r"].data<uint16_t>();
 
-void visualize_points(const std::vector<float>& positions, size_t num_points) {
-    // Create point cloud from positions
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    // Directly update the point cloud with the positions from the npz file
     cloud->width = num_points;
     cloud->height = 1;
-    cloud->is_dense = false;
-    cloud->points.resize(num_points);
 
-    // std::cout << "Total " << num_points << " points" <<std::endl;
-
-    for (size_t i = 0; i < num_points; ++i) {
-        cloud->points[i].x = positions[i * 3];
-        cloud->points[i].y = positions[i * 3 + 1];
-        cloud->points[i].z = positions[i * 3 + 2];
+		for (size_t i = 0; i < num_points; ++i) {
+      cloud->points[i].x = xs[i]*1e-3;
+      cloud->points[i].y = ys[i]*1e-3;
+      cloud->points[i].z = zs[i]*1e-3;
+      cloud->points[i].intensity = rs[i]*1e-2;
     }
+		std::cout << "Number of points " << num_points << std::endl;
 
-    // std::cout <<"Assigning Finished!" << std::endl;
+		// Update the viewer with the new point cloud data
+    viewer->removePointCloud("points");
 
-    // Initialize visualizer
-    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
-    viewer->setBackgroundColor(0, 0, 0);
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> single_color(cloud, 255, 255, 255);
-    // std::cout <<"Visualizer initialized." << std::endl;
+    // Add the new point cloud to the viewer
+    pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZI> intensity_handler(cloud, "intensity");
+    viewer->addPointCloud<pcl::PointXYZI>(cloud, intensity_handler, "points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "point_cloud");
 
-    // Add point cloud to viewer
-    viewer->addPointCloud<pcl::PointXYZ>(cloud, single_color, "sample cloud");
-    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
-    viewer->addCoordinateSystem(1.0);
-    viewer->initCameraParameters();
-    // std::cout << "Added point cloud to viewer." << std::endl;
+    // Spin the viewer once to update the point cloud display
+    // viewer->spinOnce();
+		// viewer->spin();
 
-    // Start viewer
-    while (!viewer->wasStopped()) {
-        viewer->spin();
-    }
+  } catch (const std::runtime_error& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    throw;
+  }
 }
-

@@ -4,17 +4,18 @@
 #include <thread>
 #include <chrono>
 
+#include "cnpy.h"
+#include "visualize.h"
 
-#include "frame.h"
-
+const std::size_t max_points = 40000;
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <npz filename>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <directory_with_npz_files>" << std::endl;
     return 1;
   }
 
-  std::string npz_filename = argv[1];
+  std::string directory = argv[1];
 
   // Initialize point cloud object
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>());
@@ -28,18 +29,15 @@ int main(int argc, char* argv[]) {
 
   // Start the rendering loop
   while (!viewer->wasStopped()) {
-    // Create a Frame object by loading an npz file
-    Frame frame(npz_filename);
+    for (size_t idx = 0; idx < 5000; idx++) {
+      std::string npz_filename = directory + "rc_" + std::to_string(idx) + ".npz";
+      visualize_points(npz_filename, viewer, cloud);
 
-    // Visualize the frame using the visualize member function
-    frame.visualize(viewer, cloud);
-
-
-    // Add delay
-    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    // viewer->spinOnce(100);
-    viewer->spin();
-
+      // Add delay
+      // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      viewer->spinOnce(100);
+      // viewer->spin();
+    }
   }
 
   return 0;
