@@ -1,0 +1,13 @@
+{
+  "max_theta": 1.05,
+  "theta_grid_size": 0.1,
+  "n_angular_grids": 21,
+  "min_dist": 3,
+  "dist_grid_size": 0.4,
+  "n_dist_grids": 500,
+  "lidar_height": 1.7,
+  "dz_local": 0.1,
+  "dz_global": 0.5,
+  "max_slope": 0.05,
+  "min_grd_pts": 4
+}

@@ -10,6 +10,7 @@ Version: 1.0.0
 """
 import numpy as np
 import plotly.graph_objects as go
+import util
 
 _IS_NOISE  = np.uint8(1)
 _IS_GROUND = np.uint8(2)
@@ -18,16 +19,6 @@ _IS_VEHCLE = np.uint8(8)
 _IS_SIGN   = np.uint8(16)
 _IS_PED    = np.uint8(32)
 _IS_BIKER  = np.uint32(64)
-
-
-def plane_fit(pos_arr):
-	"""
-	Return the local ground parameters
-	O(N) complexity
-	"""
-	mat = np.vstack([pos_arr[:, :2].T, np.ones(len(pos_arr))]) # (3 * N), 3 -> x, y, 1
-	grd_par = np.linalg.lstsq(mat.T, pos_arr[:, 2], rcond=None)[0]
-	return grd_par
 
 
 class Frame():
@@ -58,7 +49,7 @@ class Frame():
 		
 		grd_candidates = np.where(grd_candidates)[0]
 		# Fit a global ground plane: z = ax + by + c
-		a, b, c = plane_fit(self.pos[grd_candidates])
+		a, b, c = util.plane_fit(self.pos[grd_candidates])
 
 		# Set default heights
 		self.h_arr = self.pos[:, 2] - a * self.pos[:, 0] - b * self.pos[:, 1] - c
@@ -83,7 +74,7 @@ class Frame():
 					continue
 
 				# Fit the local piece of the ground
-				grd_par = plane_fit(self.pos[to_fit_idx])
+				grd_par = util.plane_fit(self.pos[to_fit_idx])
 				
 				# clip the slope
 				grd_par[:2] = grd_par[:2].clip(-self.cfg["max_slope"], self.cfg["max_slope"])
