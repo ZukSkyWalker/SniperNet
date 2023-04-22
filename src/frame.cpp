@@ -28,30 +28,33 @@ Frame::Frame(const std::string& npz_filename) {
 	}
 }
 
+void Frame::load_cfg(const json & cfg) {
+	max_theta = cfg["max_theta"].get<float>();
+	min_dist = cfg["min_dist"].get<float>();
+	inv_theta_grid_size = 1.0 / cfg["theta_grid_size"].get<float>();
+	inv_dist_grid_size = 1.0 / cfg["dist_grid_size"].get<float>();
 
-void Frame::gridding(const json & cfg) {
+	lidar_height = cfg["lidar_height"].get<float>();
+	max_slope = cfg["max_slope"].get<float>();
+	dz_local = cfg["dz_local"].get<float>();
+	dz_global = cfg["dz_global"].get<float>();
+
+	n_angular_grids = static_cast<size_t>(2 * max_theta * inv_theta_grid_size);
+	n_dist_grids = cfg["n_dist_grids"].get<size_t>();
+}
+
+
+void Frame::gridding() {
+	size_t grid_idx, ix, iy;
+	float dz_cut;
+
 	// Calculate the sqrt(x^2 + y^2)
 	distXY.head(n_points) = (pos.topRows(n_points).col(0).array().square() 
 	+ pos.topRows(n_points).col(1).array().square()).sqrt();
 
 	// Calculate the angular array
 	thetas.head(n_points) = (pos.topRows(n_points).col(0).array() / distXY.head(n_points)).asin();
-
-	float max_theta = cfg["max_theta"].get<float>();
-	float min_dist = cfg["min_dist"].get<float>();
-	float inv_theta_grid_size = 1.0 / cfg["theta_grid_size"].get<float>();
-	float inv_dist_grid_size = 1.0 / cfg["dist_grid_size"].get<float>();
-
-	size_t n_dist_grids = cfg["n_dist_grids"].get<size_t>();
-	size_t n_angular_grids = cfg["n_angular_grids"].get<size_t>();
-	size_t grid_idx, ix, iy;
-
-	float lidar_height = cfg["lidar_height"].get<float>();
-	float max_slope = cfg["max_slope"].get<float>();
-	float dz_local = cfg["dz_local"].get<float>();
-	float dz_global = cfg["dz_global"].get<float>();
-	float dz_cut;
-
+	
 	// Partition the points into the grids
 	grid_indices.resize(n_dist_grids * n_angular_grids);
 	// grd_candidates.resize(n_points);
@@ -87,7 +90,7 @@ void Frame::gridding(const json & cfg) {
 	}
 }
 
-void Frame::ground_detection(const json & cfg) {
+void Frame::ground_detection() {
 	//Reset the flags array
 	flags.setZero();
 

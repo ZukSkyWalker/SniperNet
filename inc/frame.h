@@ -18,16 +18,23 @@ using json = nlohmann::json;
 class Frame {
 	public:
 		Frame(const std::string& npz_filename);
+
+		void load_cfg(const json & cfg);
+
 		void visualize(pcl::visualization::PCLVisualizer::Ptr viewer,
 									 pcl::PointCloud<pcl::PointXYZI>::Ptr xyzi);
 
-		void gridding(const json & cfg);
-		void ground_detection(const json & cfg);
+		void gridding();
+		void ground_detection();
+
+		// Configuration storage
+		float max_theta, min_dist, inv_theta_grid_size, inv_dist_grid_size;
+		float lidar_height, max_slope, dz_local, dz_global;
+		size_t n_dist_grids, n_angular_grids;
 
 	private:
 		// 1. Member functions
 		// void ground_detection(const json & cfg);
-
 
 		// 2. Private members
 		// Matrix for matrix operation: x, y, z

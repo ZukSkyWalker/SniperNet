@@ -46,9 +46,12 @@ int main(int argc, char* argv[]) {
     // Create a Frame object by loading an npz file
     Frame frame(npz_filename);
 
+    // Load configuration
+    frame.load_cfg(config);
+
     // Gridding
     auto t0 = std::chrono::steady_clock::now();
-    frame.gridding(config);
+    frame.gridding();
     auto t1 = std::chrono::steady_clock::now();
     std::cout << "Gridding: "
               << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()
@@ -56,7 +59,7 @@ int main(int argc, char* argv[]) {
 
     // Ground Detection
     t0 = t1;
-    frame.ground_detection(config);
+    frame.ground_detection();
     t1 = std::chrono::steady_clock::now();
     std::cout << "Ground Detection: "
               << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()
