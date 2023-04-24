@@ -25,6 +25,7 @@ add_executable(
   ptc_player
     src/main.cpp
     src/frame.cpp
+    src/visualize.cpp
     src/util.cpp
     libs/cnpy/cnpy.cpp
 )

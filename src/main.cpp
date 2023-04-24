@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "frame.h"
+#include "visualize.h"
 
 
 int main(int argc, char* argv[]) {
@@ -44,15 +45,23 @@ int main(int argc, char* argv[]) {
   // Start the rendering loop
   while (!viewer->wasStopped()) {
     // Create a Frame object by loading an npz file
-    Frame frame(npz_filename);
+    Frame frame;
 
     // Load configuration
     frame.load_cfg(config);
 
-    // Gridding
+    // Load points
     auto t0 = std::chrono::steady_clock::now();
-    frame.gridding();
+    frame.load_pts(npz_filename);
     auto t1 = std::chrono::steady_clock::now();
+    std::cout << "Loading Points: "
+              << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()
+              << "us" << std::endl;
+
+    // Gridding
+    t0 = t1;
+    frame.gridding();
+    t1 = std::chrono::steady_clock::now();
     std::cout << "Gridding: "
               << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()
               << "us" << std::endl;
@@ -66,7 +75,9 @@ int main(int argc, char* argv[]) {
               << "us" << std::endl;
 
     // Visualize the frame using the visualize member function
-    frame.visualize(viewer, cloud);
+    visualize_frame(viewer, cloud, frame);
+
+    // frame.visualize(viewer, cloud);
 
     // Add delay
     // std::this_thread::sleep_for(std::chrono::milliseconds(100));
