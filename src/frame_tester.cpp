@@ -34,7 +34,10 @@ int main(int argc, char* argv[]) {
 
   // Initialize point cloud object
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>());
-  cloud->points.resize(max_points);
+  cloud->points.reserve(max_points);
+
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground_points(new pcl::PointCloud<pcl::PointXYZRGB>());
+  ground_points->points.reserve(max_points);
 
   // Initialize the visualizer
   pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
@@ -75,7 +78,7 @@ int main(int argc, char* argv[]) {
               << "us" << std::endl;
 
     // Visualize the frame using the visualize member function
-    visualize_frame(viewer, cloud, frame);
+    visualize_frame(viewer, ground_points, cloud, frame);
 
     // frame.visualize(viewer, cloud);
 

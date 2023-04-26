@@ -1,6 +1,3 @@
-import numpy as np
-
-
 def plane_fit(pos):
 	"""
 	Return the local ground parameters
@@ -25,10 +22,10 @@ def plane_fit(pos):
 	dxy = pxx * pyy - pxy * pxy
 	a = 0
 	if dxy != 0:
-			a = (pxz * pyy - pyz * pxy) / dxy
+		a = (pxz * pyy - pyz * pxy) / dxy
 
 	b = 0
 	if pxy != 0:
-			b = (pxz - a*pxx) / pxy
+		b = (pxz - a*pxx) / pxy
 			
 	return a, b, z0 - a*x0 - b*y0

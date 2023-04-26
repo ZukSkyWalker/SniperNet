@@ -2,8 +2,11 @@
 #include <iostream>
 #include <Eigen/Dense>
 
+
+
 std::array<float, 3> plane_fit(const Eigen::Array<float, Eigen::Dynamic, 3>& pos) {
   Eigen::ArrayXf mean = pos.colwise().mean();
+  // auto centered = pos;
   Eigen::ArrayXXf centered = pos.rowwise() - mean.transpose();
 
   float pxx = (centered.col(0) * centered.col(0)).sum();

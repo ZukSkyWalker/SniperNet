@@ -23,7 +23,7 @@ add_definitions(${PCL_DEFINITIONS})
 
 add_executable(
   ptc_player
-    src/main.cpp
+    src/frame_tester.cpp
     src/frame.cpp
     src/visualize.cpp
     src/util.cpp
