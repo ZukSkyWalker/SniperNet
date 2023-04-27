@@ -99,12 +99,14 @@ void Frame::ground_detection() {
 	int g_ix, g_iy;
 
 	// Loop through the grounds to get the local points marked
-	for (size_t i = 0; i< grid_indices.size();  ++i) {
-		if ((h_arr(grid_indices[i]) < dz_local).cast<size_t>().sum() < min_grd_pts) continue;
-
+	for (size_t i = n_angular_grids+1; i < grid_indices.size(); i+=2) {
 		// Get the ix and iy
 		ix = i % n_angular_grids;
 		iy = i / n_angular_grids;
+
+		if (iy == 0) continue;
+
+		if ((h_arr(grid_indices[i]) < dz_local).cast<size_t>().sum() < min_grd_pts) continue;
 
 		// get all neighboring indices
 		std::vector<size_t> nearby_indices(grid_indices[i].begin(), grid_indices[i].end());
