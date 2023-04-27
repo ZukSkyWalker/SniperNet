@@ -19,7 +19,6 @@ void Frame::load_cfg(const json & cfg) {
 	n_angular_grids = static_cast<size_t>(2 * max_theta * inv_theta_grid_size);
 	n_dist_grids = cfg["n_dist_grids"].get<size_t>();
 	min_grd_pts = cfg["min_grd_pts"].get<size_t>();
-
 }
 
 void Frame::load_pts(const std::string& npz_filename) {
@@ -101,21 +100,20 @@ void Frame::ground_detection() {
 
 	// Loop through the grounds to get the local points marked
 	for (size_t i = 0; i< grid_indices.size();  ++i) {
-		// Skip this grid if not enough seed ground points
-		// if (grid_indices[i].size() < min_grd_pts) continue;
-
 		if ((h_arr(grid_indices[i]) < dz_local).cast<size_t>().sum() < min_grd_pts) continue;
 
 		// Get the ix and iy
 		ix = i % n_angular_grids;
 		iy = i / n_angular_grids;
 
+		// get all neighboring indices
+		std::vector<size_t> nearby_indices(grid_indices[i].begin(), grid_indices[i].end());
+
 		// get Neiboring indices of the grid and perform the fit
 		std::vector<size_t> nearby_to_fit_idx;
 
 		for (int d_ix = -1; d_ix < 2; d_ix++) {
 			for (int d_iy = -1; d_iy < 2; d_iy++) {
-				// if (d_ix == 0 && d_iy==0) continue;
 				g_ix = d_ix + ix;
 				if (g_ix < 0 || g_ix >= n_angular_grids) continue;
 
@@ -123,6 +121,9 @@ void Frame::ground_detection() {
 				if (g_iy < 0 || g_iy >= n_dist_grids) continue;
 
 				nb_idx = g_ix + g_iy * n_angular_grids;
+
+				if (!(d_ix == 0 && d_iy==0))
+					nearby_indices.insert(nearby_indices.end(), grid_indices[nb_idx].begin(), grid_indices[nb_idx].end());
 
 				for (auto idx : grid_indices[nb_idx]) {
 					if (h_arr[idx] < dz_local) nearby_to_fit_idx.emplace_back(idx);
@@ -134,20 +135,31 @@ void Frame::ground_detection() {
 		std::array<float, 3> local_grd_par = plane_fit(pos(nearby_to_fit_idx, Eigen::all));
 
 		// Update the height for the points in the grid
-		h_arr(grid_indices[i]) = pos(grid_indices[i], 2) - local_grd_par[0] * pos(grid_indices[i], 0)
-		- local_grd_par[1] * pos(grid_indices[i], 1) - local_grd_par[2];
+		// h_arr(grid_indices[i]) = pos(grid_indices[i], 2) - local_grd_par[0] * pos(grid_indices[i], 0)
+		// - local_grd_par[1] * pos(grid_indices[i], 1) - local_grd_par[2];
 
-		// Label the local ground points
-		size_t local_grd_pts = 0;
-		for (auto idx : grid_indices[i]) {
+		// // Label the local ground points
+		// size_t local_grd_pts = 0;
+		// for (auto idx : grid_indices[i]) {
+		// 	if (h_arr[idx] < dz_local) {
+		// 		// Compiling time to convert the type
+		// 		flags[idx] |= static_cast<uint8_t>(Flag::IS_GROUND);
+		// 		local_grd_pts++;
+		// 	}
+		// }
+
+		// get the entire neighborhood labeled
+		h_arr(nearby_indices) = pos(nearby_indices, 2) - local_grd_par[0] * pos(nearby_indices, 0)
+		- local_grd_par[1] * pos(nearby_indices, 1) - local_grd_par[2];
+
+		// size_t local_grd_pts = 0;
+		for (auto idx : nearby_indices) {
 			if (h_arr[idx] < dz_local) {
 				// Compiling time to convert the type
 				flags[idx] |= static_cast<uint8_t>(Flag::IS_GROUND);
-				local_grd_pts++;
+				// local_grd_pts++;
 			}
 		}
-
-		// std::cout << local_grd_pts << " local ground points:" << "a="<< local_grd_par[0] <<", b="<<local_grd_par[1] << std::endl;
 
 	}
 
