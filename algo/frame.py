@@ -33,6 +33,7 @@ class Frame():
 		self.h_arr = np.zeros(self.n_points)
 		self.distXY = np.sqrt((self.pos[:, :2]**2).sum(axis=1))
 		self.flags = np.zeros(self.n_points, dtype=np.uint8)
+		self.cid_arr = np.zeros(self.n_points, dtype=np.uint16)
 
 		self.grd_par = np.array([0, 0, -cfg["lidar_height"]])
 
@@ -74,7 +75,7 @@ class Frame():
 					continue
 
 				# Fit the local piece of the ground
-				grd_par = util.plane_fit(self.pos[to_fit_idx])
+				grd_par = np.array(util.plane_fit(self.pos[to_fit_idx]))
 				
 				# clip the slope
 				grd_par[:2] = grd_par[:2].clip(-self.cfg["max_slope"], self.cfg["max_slope"])
@@ -88,6 +89,34 @@ class Frame():
 				on_local_plane = (self.h_arr[local_idx] > -self.cfg["dz_global"]) & (self.h_arr[local_idx] < self.cfg["dz_local"])
 				self.flags[local_idx[~on_local_plane]] = 0
 				self.flags[local_idx[on_local_plane]] |= _IS_GROUND
+
+
+	def clustering(self):
+		"""
+		Loop through all the 2D grids, assign the cluster id to every grid
+		"""
+		next_cid = 1
+		self.cid_arr = np.zeros(self.n_points, dtype=np.uint16)
+		h_cut = (self.h_arr < self.cfg["base_h_cut"]) & (self.h_arr >= self.cfg["dz_local"])
+		for ix in range(self.x_idx.min()+1, self.x_idx.max()):
+			in_x = (self.x_idx >= ix-1) & (self.x_idx <= ix) & h_cut
+			if in_x.sum() < 1:
+				continue
+
+			for iy in range(self.y_idx.min()+1, self.y_idx.max()):
+				in_y = (self.y_idx >= iy-1) & (self.y_idx <= iy) & h_cut
+				in_grid = in_x & in_y
+				grid_samples = in_grid.sum()
+				if grid_samples < 1:
+					continue
+
+				cid = self.cid_arr[in_grid].max()
+
+				if cid > 0:
+					self.cid_arr[in_grid] = cid
+				elif grid_samples >= self.cfg["min_samples"]:
+					self.cid_arr[in_grid] = next_cid
+					next_cid += 1
 
 
 	def visualize(self):
