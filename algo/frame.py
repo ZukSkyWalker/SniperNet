@@ -118,6 +118,42 @@ class Frame():
 					self.cid_arr[in_grid] = next_cid
 					next_cid += 1
 
+	def grow_cluster(self):
+		"""
+		For the selected cid, we label points with heigher position if there are spatially close
+		"""
+		connect_layer = (self.h_arr > self.cfg["base_h_cut"] - self.cfg["dz_global"])
+		grid_indices = np.c_[self.x_idx, self.y_idx]
+
+		for cid in range(1, self.cid_arr.max()+1):
+			seeds = connect_layer & (self.cid_arr == cid)
+			if seeds.sum() < 1:
+				continue
+
+			grids = np.unique(grid_indices[seeds], axis=0)
+
+			# increase the layer in heights
+			for h0 in np.arange(self.cfg["base_h_cut"], self.cfg["h_max_cut"], self.cfg["h_grid_size"]):
+				in_layer = (self.h_arr >= h0) & (self.h_arr < h0 + self.cfg["h_grid_size"])
+				sel_arr = np.zeros(len(self.cid_arr), dtype=bool)
+				for ix, iy in grids:
+					# query for the points near the grid
+					nearby = (np.abs(self.x_idx - ix)<2) & (np.abs(self.y_idx - iy)<2) & in_layer
+
+					# Label the cid
+					self.cid_arr[nearby] = cid
+					sel_arr |= nearby
+
+				if sel_arr.sum() < 1:
+					break
+
+				# update the grids set
+				grids = np.unique(grid_indices[sel_arr], axis=0)
+
+				
+
+		
+
 
 	def visualize(self):
 		is_grd = self.flags & _IS_GROUND > 0
