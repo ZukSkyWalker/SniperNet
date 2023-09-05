@@ -1,13 +1,16 @@
 {
-  "max_theta": 1.05,
-  "theta_grid_size": 0.1,
-  "n_angular_grids": 21,
-  "min_dist": 2.1,
-  "dist_grid_size": 0.4,
-  "n_dist_grids": 500,
-  "lidar_height": 1.7,
-  "dz_local": 0.1,
-  "dz_global": 0.5,
-  "max_slope": 0.05,
-  "min_grd_pts": 4
+  "dataset_dir": "/home/zukai/zWork/Data/kitti/",
+  "NX": 1024,
+  "NY": 1024,
+  "x_range": 64,
+  "y_range": 64,
+  "z_min": -3,
+  "z_max": 6,
+  "h_range": 5.5,
+  "lidar_height": 1.5,
+  "z_range": 5,
+  "dz": 0.05,
+  "max_z_gap": 4,
+  "min_ground_ratio": 5e-4,
+  "min_ground_layer_pts": 10
 }
