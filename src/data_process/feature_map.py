@@ -114,49 +114,49 @@ class frame():
 
 @cuda.jit
 def bev_map_kernel(pos, x_range, y_range, NX, NY, max_z_gap, sig_height_range, base_map, height_map, density_map):
-    tx = cuda.threadIdx.x  # Thread id in a 1D block
-    ty = cuda.blockIdx.x   # Block id in a 1D grid
-    bw = cuda.blockDim.x   # Block width, i.e. number of threads per block
-    pos_idx = tx + ty * bw
+  tx = cuda.threadIdx.x  # Thread id in a 1D block
+  ty = cuda.blockIdx.x   # Block id in a 1D grid
+  bw = cuda.blockDim.x   # Block width, i.e. number of threads per block
+  pos_idx = tx + ty * bw
 
-    if pos_idx >= pos.shape[0]:  # Ensure we don't go out of bounds
-        return
+  if pos_idx >= pos.shape[0]:  # Ensure we don't go out of bounds
+      return
 
-    x, y, z = pos[pos_idx]
+  x, y, z = pos[pos_idx]
 
-    # Compute the grid indices for the point
-    idx_x = int(0.5 * (x + x_range) * NX / x_range)
-    idx_y = int(0.5 * (y + y_range) * NY / y_range)
+  # Compute the grid indices for the point
+  idx_x = int(0.5 * (x + x_range) * NX / x_range)
+  idx_y = int(0.5 * (y + y_range) * NY / y_range)
 
-    # Atomic operations ensure that updates from multiple threads are serialized
-    cuda.atomic.min(base_map, (idx_x, idx_y), z)
-    cuda.atomic.max(height_map, (idx_x, idx_y), z)
-    cuda.atomic.add(density_map, (idx_x, idx_y), 1)  # Increment count by 1
+  # Atomic operations ensure that updates from multiple threads are serialized
+  cuda.atomic.min(base_map, (idx_x, idx_y), z)
+  cuda.atomic.max(height_map, (idx_x, idx_y), z)
+  cuda.atomic.add(density_map, (idx_x, idx_y), 1)  # Increment count by 1
 
 def set_bev_map_gpu(self):
-    # ... Preparation of data ...
+  # ... Preparation of data ...
 
-    # Memory allocation and data transfer to device
-    pos_device = cuda.to_device(self.pos)
+  # Memory allocation and data transfer to device
+  pos_device = cuda.to_device(self.pos)
 
-    base_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.float32)
-    height_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.float32)
-    density_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.int32)
+  base_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.float32)
+  height_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.float32)
+  density_map_device = cuda.device_array((self.cfg["NX"], self.cfg["NY"]), dtype=np.int32)
 
-    # Initialize base_map_device to a very large value for the atomic.min operation
-    base_map_device[:] = np.finfo(np.float32).max
+  # Initialize base_map_device to a very large value for the atomic.min operation
+  base_map_device[:] = np.finfo(np.float32).max
 
-    # Initialize height_map_device to a very small value for the atomic.max operation
-    height_map_device[:] = np.finfo(np.float32).min
+  # Initialize height_map_device to a very small value for the atomic.max operation
+  height_map_device[:] = np.finfo(np.float32).min
 
-    # Launching the kernel
-    threadsperblock = 32
-    blockspergrid = (self.pos.shape[0] + (threadsperblock - 1)) // threadsperblock
-    bev_map_kernel[blockspergrid, threadsperblock](pos_device, self.cfg["x_range"], self.cfg["y_range"], self.cfg["NX"], self.cfg["NY"], self.cfg["max_z_gap"], self.cfg["sig_height_range"], base_map_device, height_map_device, density_map_device)
+  # Launching the kernel
+  threadsperblock = 32
+  blockspergrid = (self.pos.shape[0] + (threadsperblock - 1)) // threadsperblock
+  bev_map_kernel[blockspergrid, threadsperblock](pos_device, self.cfg["x_range"], self.cfg["y_range"], self.cfg["NX"], self.cfg["NY"], self.cfg["max_z_gap"], self.cfg["sig_height_range"], base_map_device, height_map_device, density_map_device)
 
-    # Copy data back from device to host
-    base_map = base_map_device.copy_to_host()
-    height_map = height_map_device.copy_to_host()
-    density_map = density_map_device.copy_to_host()
+  # Copy data back from device to host
+  base_map = base_map_device.copy_to_host()
+  height_map = height_map_device.copy_to_host()
+  density_map = density_map_device.copy_to_host()
 
-    return base_map, height_map, density_map
+  return base_map, height_map, density_map
