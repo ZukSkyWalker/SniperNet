@@ -39,3 +39,5 @@ build/**
 **/.ipynb_checkpoints**
 **.pyc
 **__pycache__**
+
+dataset/
