@@ -36,6 +36,20 @@ class frame():
     pts_thresh = max(len(self.pos) * self.cfg["min_ground_ratio"], self.cfg["min_ground_layer_pts"])
     base_idx = np.where(cnts > pts_thresh)[0][0]
     return edges[base_idx]
+  
+  def set_map(self, z_arr, gx, gy):
+    b, h = z_arr.min(), z_arr.max()
+    cnt = 1
+    if len(z_arr) > 1:
+      idx_arr = np.where((z_arr[1:] > z_arr[:-1] + self.cfg["max_z_gap"]) 
+                         & (z_arr[1:] > self.base + self.cfg["sig_height_range"]))[0]
+      if len(idx_arr) > 0:
+        h = z_arr[idx_arr[0]]
+        cnt = idx_arr[0]
+
+    self.base_map[gx, gy] = b
+    self.height_map[gx, gy] = h
+    self.density_map[gx, gy] = cnt
 
 
   @timer_func
@@ -51,38 +65,21 @@ class frame():
     idx_y = (0.5 * (y + self.cfg["y_range"]) * self.cfg["NY"] / self.cfg["y_range"]).astype(np.int32)
 
     glb_idx = idx_x * self.cfg["NY"] + idx_y
-
-    base_map = np.zeros((self.cfg["NX"], self.cfg["NY"]))
-    height_map = np.zeros((self.cfg["NX"], self.cfg["NY"]))
-    density_map = np.zeros((self.cfg["NX"], self.cfg["NY"]))
-
-    sorted_indices = np.lexsort((glb_idx, self.pos[:, 2]))
+    # The last key in the sequence is used for the primary sort order, 
+    # the second-to-last key for the secondary sort order, and so on.
+    sorted_indices = np.lexsort((self.pos[:, 2], glb_idx))
     
     i0 = 0
-    z = self.pos[sorted_indices, 2]
+    self.pos = self.pos[sorted_indices]
     unique_idx, idx_counts = np.unique(glb_idx[sorted_indices], return_counts=True)
 
     for i in range(len(unique_idx)):
-      z_arr = z[i0:(i0+idx_counts[i])]
       # Decode the grid index
-      gx = unique_idx[i] // self.cfg["NY"]
-      gy = unique_idx[i] % self.cfg["NY"]
+      gx, gy = divmod(unique_idx[i], self.cfg['NY'])
 
       # Set the grid height and base
-      base_map[gx, gy] = z_arr.min()
-
-      h = z_arr.max()
-
-      if len(z_arr) > 1:
-        idx_arr = np.where((z_arr[1:] > z_arr[:-1] + self.cfg["max_z_gap"]) & (z_arr[1:] > self.cfg["sig_height_range"]))[0]
-        if len(idx_arr) > 0:
-          h = z_arr[idx_arr[0]]
-
-      height_map[gx, gy] = h
-      density_map[gx, gy] = idx_counts[i]
+      self.set_map(self.pos[i0:(i0+idx_counts[i]), 2], gx, gy)
       i0 += idx_counts[i]
-
-    return base_map, height_map, density_map
 
 
   @timer_func
