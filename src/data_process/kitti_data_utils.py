@@ -10,7 +10,7 @@ while not src_dir.endswith("scout"):
 if src_dir not in sys.path:
   sys.path.append(src_dir)
 
-import config.kitti_config as kitti_cfg
+import kitti_config as kitti_cfg
 
 class Object3d(object):
   ''' 3d object label '''
