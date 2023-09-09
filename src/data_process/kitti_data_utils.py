@@ -1,92 +1,99 @@
-import os
-import sys
-
 import numpy as np
-import cv2
+import os
 
-src_dir = os.path.dirname(os.path.realpath(__file__))
-while not src_dir.endswith("scout"):
-  src_dir = os.path.dirname(src_dir)
-if src_dir not in sys.path:
-  sys.path.append(src_dir)
+from util.timing import timer_func
+import data_process.kitti_config as kitti_cfg
 
-import kitti_config as kitti_cfg
+# Default transform matrix from the camera to lidar
+c2l_mat = kitti_cfg.Tr_velo_to_cam_inv @ kitti_cfg.R0_inv
 
-class Object3d(object):
-  ''' 3d object label '''
+# BEV Image coordinates format
+def get_corners(x, y, w, l, yaw):
+  bev_corners = np.zeros((4, 2), dtype=np.float32)
+  cos_yaw = np.cos(yaw)
+  sin_yaw = np.sin(yaw)
 
-  def __init__(self, label_file_line) -> None:
-    data = label_file_line.split(' ')
-    data[1:] = [float(x) for x in data[1:]]
+  # front left
+  bev_corners[0, 0] = x - 0.5 * w * cos_yaw - 0.5 * l * sin_yaw
+  bev_corners[0, 1] = y - 0.5 * w * sin_yaw + 0.5 * l * cos_yaw
 
-    # extract label, truncation, occlusion
-    self.type = data[0]  # 'Car', 'Pedestrian', ...
-    self.cls_id = self.cls_type_to_id(self.type)
-    self.truncation = data[1]       # truncated pixel ratio [0..1]
-    self.occlustion = int(data[2])  # 0=visible, 1=partly occluded, 2=fully occluded, 3=unknown
-    self.alpha = data[3]            # object observation angle [-pi..pi]
+  # rear left
+  bev_corners[1, 0] = x - 0.5 * w * cos_yaw + 0.5 * l * sin_yaw
+  bev_corners[1, 1] = y - 0.5 * w * sin_yaw - 0.5 * l * cos_yaw
 
-    # extract 2d bounding box in 0-based coordinates
-    self.xmin = data[4]  # left
-    self.ymin = data[5]  # top
-    self.xmax = data[6]  # right
-    self.ymax = data[7]  # bottom
-    self.box2d = np.array([self.xmin, self.ymin, self.xmax, self.ymax])
+  # rear right
+  bev_corners[2, 0] = x + 0.5 * w * cos_yaw + 0.5 * l * sin_yaw
+  bev_corners[2, 1] = y + 0.5 * w * sin_yaw - 0.5 * l * cos_yaw
 
-    # extract 3d bounding box information
-    self.h = data[8]  # box height
-    self.w = data[9]  # box width
-    self.l = data[10]  # box length (in meters)
-    self.t = (data[11], data[12], data[13])  # location (x,y,z) in camera coord.
-    self.dis_to_cam = np.linalg.norm(self.t)
-    self.ry = data[14]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
-    self.score = data[15] if data.__len__() == 16 else -1.0
-    self.level_str = None
-    self.level = self.get_obj_level()
+  # front right
+  bev_corners[3, 0] = x + 0.5 * w * cos_yaw - 0.5 * l * sin_yaw
+  bev_corners[3, 1] = y + 0.5 * w * sin_yaw + 0.5 * l * cos_yaw
 
-  def __repr__(self) -> str:
-    s  = f'Type, truncation, occlusion, alpha: {self.type}, {self.truncation}, {self.occlustion}, {self.alpha}/n'
-    s += f'2D bbox (x0, y0, x1, y1): {self.xmin}, {self.xmax}, {self.ymin}, {self.ymax}/n'
-    s += f'3D bbox h, w, l: {self.h}, {self.w}, {self.l}/n'
-    s += f"3D bbox location: ({self.t[0]}, {self.t[1]}, {self.t[2]}); Yaw = {self.ry}"
-    return s
-  
-  def to_kitti_format(self):
-    kitti_str  = f'{self.type} {self.truncation:.2f} {self.occlusion:.0f} {self.alpha:.2f} '
-    kitti_str += f'{self.box2d[0]:.2f} {self.box2d[1]:.2f} {self.box2d[2]:.2f} {self.box2d[3]:.2f}'
-    kitti_str += f'{self.h:.2f} {self.w:.2f} {self.l:.2f} '
-    kitti_str += f"{self.t[0]:.2f} {self.t[1]:.2f} {self.t[2]:.2f} {self.ry:.2f} {self.score:.2f}"
-    return kitti_str
+  return bev_corners
 
-  def read_label(label_filename):
-    lines = [line.rstrip() for line in open(label_filename)]
-    objects = [Object3d(line) for line in lines]
-    return objects
 
-  def cls_type_to_id(self, cls_type):
-    if cls_type not in kitti_cfg.CLASS_NAME_TO_ID.keys():
-      return -1
+class frame():
+  def __init__(self, lidar_file) -> None:
+    pos_arr = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 4)
+
+    in_range  = (pos_arr[:, 0] > kitti_cfg.boundary["minX"]) & (pos_arr[:, 0] < kitti_cfg.boundary["maxX"])
+    in_range &= (pos_arr[:, 1] > kitti_cfg.boundary["minY"]) & (pos_arr[:, 1] < kitti_cfg.boundary["maxY"])
+    in_range &= (pos_arr[:, 2] > kitti_cfg.boundary["minZ"]) & (pos_arr[:, 2] < kitti_cfg.boundary["maxZ"])
+    self.pos = pos_arr[in_range]
+
+    # Initialize the BEV Maps: 0=>base; 1=>height; 2:density
+    self.bev = np.zeros((3, kitti_cfg.W, kitti_cfg.H))
+
+  def set_grid(self, z_arr, gx, gy):
+    b, h = z_arr.min(), z_arr.max()
+    cnt = 1
+    if len(z_arr) > 1:
+      idx_arr = np.where((z_arr[1:] > z_arr[:-1] + kitti_cfg.max_z_gap)
+                         & (z_arr[1:] > kitti_cfg.sig_z_thresh))[0]
+      if len(idx_arr) > 0:
+        h = z_arr[idx_arr[0]]
+        cnt = idx_arr[0]
+
+    self.bev[0, gx, gy] = b
+    self.bev[1, gx, gy] = h
+    self.bev[2, gx, gy] = cnt * (gx*gx + (gy - kitti_cfg.H//2)**2)
+
+  @timer_func
+  def set_bev_map(self):
+    """
+    Return base_map, height_map and the counts map as a supervisor
+    """
+    # Extract x, y, z coordinates
+    x, y = self.pos[:, 0], self.pos[:, 1]
+
+    # Compute the grid indices for every point
+    idx_x = (x / kitti_cfg.vx).astype(np.int32)
+    idx_y = ((y - kitti_cfg.boundary['minY']) / kitti_cfg.vy).astype(np.int32)
+
+    glb_idx = idx_x * kitti_cfg.H + idx_y
+    # The last key in the sequence is used for the primary sort order, 
+    # the second-to-last key for the secondary sort order, and so on.
+    sorted_indices = np.lexsort((self.pos[:, 2], glb_idx))
     
-    return kitti_cfg.CLASS_NAME_TO_ID[cls_type]
-  
-  def get_obj_level(self):
-    height = float(self.box2d[3]) - float(self.box2d[1]) + 1
+    i0 = 0
+    self.pos = self.pos[sorted_indices]
+    unique_idx, idx_counts = np.unique(glb_idx[sorted_indices], return_counts=True)
 
-    if height >= 40 and self.truncation <= 0.15 and self.occlusion <= 0:
-      self.level_str = 'Easy'
-      return 1  # Easy
-    elif height >= 25 and self.truncation <= 0.3 and self.occlusion <= 1:
-      self.level_str = 'Moderate'
-      return 2  # Moderate
-    elif height >= 25 and self.truncation <= 0.5 and self.occlusion <= 2:
-      self.level_str = 'Hard'
-      return 3  # Hard
-    else:
-      self.level_str = 'UnKnown'
-      return 4
-    
-class Calibration(object):
-  ''' Calibration matrices and utils
+    for i in range(len(unique_idx)):
+      # Decode the grid index
+      gx, gy = divmod(unique_idx[i], kitti_cfg.H)
+
+      # Set the grid height and base
+      self.set_grid(self.pos[i0:(i0+idx_counts[i]), 2], gx, gy)
+
+      i0 += idx_counts[i]
+
+
+class agents():
+  """
+  For a given frame of point cloud, get the label ready for the frame
+
+  Calibration matrices and utils
       3d XYZ in <label>.txt are in rect camera coord.
       2d box xy are in image2 coord
       Points in <lidar>.bin are in Velodyne coord.
@@ -115,195 +122,48 @@ class Calibration(object):
 
       Ref (KITTI paper): http://www.cvlibs.net/publications/Geiger2013IJRR.pdf
 
-      TODO(rqi): do matrix multiplication only once for each projection.
-  '''
+  """
+  def __init__(self, label_path, calib_filepath) -> None:
+    self.c2l = None
+    self.labels = []
 
-  def __init__(self, calib_filepath):
-    calibs = self.read_calib_file(calib_filepath)
-    # Projection matrix from rect camera coord to image2 coord
-    self.P2 = calibs['P2']
-    self.P2 = np.reshape(self.P2, [3, 4])
-    self.P3 = calibs['P3']
-    self.P3 = np.reshape(self.P3, [3, 4])
-    # Rigid transform from Velodyne coord to reference camera coord
-    self.V2C = calibs['Tr_velo2cam']
-    self.V2C = np.reshape(self.V2C, [3, 4])
-    # Rotation from reference camera coord to rect camera coord
-    self.R0 = calibs['R_rect']
-    self.R0 = np.reshape(self.R0, [3, 3])
-
-    # Camera intrinsics and extrinsics
-    self.c_u = self.P2[0, 2]
-    self.c_v = self.P2[1, 2]
-    self.f_u = self.P2[0, 0]
-    self.f_v = self.P2[1, 1]
-    self.b_x = self.P2[0, 3] / (-self.f_u)  # relative
-    self.b_y = self.P2[1, 3] / (-self.f_v)
-
-  def read_calib_file(self, filepath):
-    with open(filepath) as f:
+    if os.path.isfile(calib_filepath):
+      with open(calib_filepath) as f:
         lines = f.readlines()
 
-    obj = lines[2].strip().split(' ')[1:]
-    P2 = np.array(obj, dtype=np.float32)
-    obj = lines[3].strip().split(' ')[1:]
-    P3 = np.array(obj, dtype=np.float32)
-    obj = lines[4].strip().split(' ')[1:]
-    R0 = np.array(obj, dtype=np.float32)
-    obj = lines[5].strip().split(' ')[1:]
-    Tr_velo_to_cam = np.array(obj, dtype=np.float32)
+      obj = lines[4].strip().split(' ')[1:]
+      R0 = np.eye(4)
+      R0[:3, :3] = (np.array(obj, dtype=np.float32)).reshape(3, 3)
 
-    return {'P2': P2.reshape(3, 4),
-            'P3': P3.reshape(3, 4),
-            'R_rect': R0.reshape(3, 3),
-            'Tr_velo2cam': Tr_velo_to_cam.reshape(3, 4)}
+      obj = lines[5].strip().split(' ')[1:]
+      V2C = np.eye(4)
+      V2C[:3, :] = (np.array(obj, dtype=np.float32)).reshape(3, 4)
 
-  def cart2hom(self, pts_3d):
-    """
-    :param pts: (N, 3 or 2)
-    :return pts_hom: (N, 4 or 3)
-    """
-    pts_hom = np.hstack((pts_3d, np.ones((pts_3d.shape[0], 1), dtype=np.float32)))
-    return pts_hom
+      self.c2l = np.linalg.inv(R0 @ V2C)
 
+    for line in open(label_path, 'r'):
+      line = line.rstrip()
+      line_parts = line.split(' ')
+      obj_name = line_parts[0]  # 'Car', 'Pedestrian', ...
+      cat_id = int(kitti_cfg.CLASS_NAME_TO_ID[obj_name])
+      if cat_id <= -99:  # ignore Tram and Misc
+        continue
 
-def compute_radius(det_size, min_overlap=0.7):
-  height, width = det_size
+      # height, width, length (h, w, l)
+      h, w, l = float(line_parts[8]), float(line_parts[9]), float(line_parts[10])
+      # location (x,y,z) in camera coord.
+      x, y, z = float(line_parts[11]), float(line_parts[12]), float(line_parts[13])
 
-  a1 = 1
-  b1 = (height + width)
-  c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
-  sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
-  r1 = (b1 + sq1) / 2
+      # Convert this camera coord (x, y, z) into lidar coord
+      x, y, z = self.camera_to_lidar(np.array([x,y,z,1]))
+      # yaw
+      ry = float(line_parts[14])  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
 
-  a2 = 4
-  b2 = 2 * (height + width)
-  c2 = (1 - min_overlap) * width * height
-  sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
-  r2 = (b2 + sq2) / 2
+      self.labels.append([cat_id, x, y, z, h, w, l, ry])
 
-  a3 = 4 * min_overlap
-  b3 = -2 * min_overlap * (height + width)
-  c3 = (min_overlap - 1) * width * height
-  sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
-  r3 = (b3 + sq3) / 2
-
-  return min(r1, r2, r3)
-
-
-def gaussian2D(shape, sigma=1):
-  m, n = [(ss - 1.) / 2. for ss in shape]
-  y, x = np.ogrid[-m:m + 1, -n:n + 1]
-  h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
-  h[h < np.finfo(h.dtype).eps * h.max()] = 0
-
-  return h
-
-
-def gen_hm_radius(heatmap, center, radius, k=1):
-  diameter = 2 * radius + 1
-  gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
-
-  x, y = int(center[0]), int(center[1])
-
-  height, width = heatmap.shape[0:2]
-
-  left, right = min(x, radius), min(width - x, radius + 1)
-  top, bottom = min(y, radius), min(height - y, radius + 1)
-
-  masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-  masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
-  if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
-    np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
-
-  return heatmap
-
-
-def get_filtered_lidar(lidar, boundary, labels=None):
-  minX = boundary['minX']
-  maxX = boundary['maxX']
-  minY = boundary['minY']
-  maxY = boundary['maxY']
-  minZ = boundary['minZ']
-  maxZ = boundary['maxZ']
-
-  # Remove the point out of range x,y,z
-  mask = np.where((lidar[:, 0] >= minX) & (lidar[:, 0] <= maxX) &
-                  (lidar[:, 1] >= minY) & (lidar[:, 1] <= maxY) &
-                  (lidar[:, 2] >= minZ) & (lidar[:, 2] <= maxZ))
-  lidar = lidar[mask]
-  lidar[:, 2] = lidar[:, 2] - minZ
-
-  if labels is not None:
-    label_x = (labels[:, 1] >= minX) & (labels[:, 1] < maxX)
-    label_y = (labels[:, 2] >= minY) & (labels[:, 2] < maxY)
-    label_z = (labels[:, 3] >= minZ) & (labels[:, 3] < maxZ)
-    mask_label = label_x & label_y & label_z
-    labels = labels[mask_label]
-    return lidar, labels
-  else:
-    return lidar
-
-
-def box3d_corners_to_center(box3d_corner):
-  # (N, 8, 3) -> (N, 7)
-  assert box3d_corner.ndim == 3
-
-  xyz = np.mean(box3d_corner, axis=1)
-
-  h = abs(np.mean(box3d_corner[:, 4:, 2] - box3d_corner[:, :4, 2], axis=1, keepdims=True))
-  w = (np.sqrt(np.sum((box3d_corner[:, 0, [0, 1]] - box3d_corner[:, 1, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 2, [0, 1]] - box3d_corner[:, 3, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 4, [0, 1]] - box3d_corner[:, 5, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 6, [0, 1]] - box3d_corner[:, 7, [0, 1]]) ** 2, axis=1, keepdims=True))) / 4
-
-  l = (np.sqrt(np.sum((box3d_corner[:, 0, [0, 1]] - box3d_corner[:, 3, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 1, [0, 1]] - box3d_corner[:, 2, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 4, [0, 1]] - box3d_corner[:, 7, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-       np.sqrt(np.sum((box3d_corner[:, 5, [0, 1]] - box3d_corner[:, 6, [0, 1]]) ** 2, axis=1, keepdims=True))) / 4
-
-  yaw = (np.arctan2(box3d_corner[:, 2, 1] - box3d_corner[:, 1, 1],
-                    box3d_corner[:, 2, 0] - box3d_corner[:, 1, 0]) +
-          np.arctan2(box3d_corner[:, 3, 1] - box3d_corner[:, 0, 1],
-                    box3d_corner[:, 3, 0] - box3d_corner[:, 0, 0]) +
-          np.arctan2(box3d_corner[:, 2, 0] - box3d_corner[:, 3, 0],
-                    box3d_corner[:, 3, 1] - box3d_corner[:, 2, 1]) +
-          np.arctan2(box3d_corner[:, 1, 0] - box3d_corner[:, 0, 0],
-                    box3d_corner[:, 0, 1] - box3d_corner[:, 1, 1]))[:, np.newaxis] / 4
-
-  return np.concatenate([h, w, l, xyz, yaw], axis=1).reshape(-1, 7)
-
-
-def box3d_center_to_conners(box3d_center):
-  h, w, l, x, y, z, yaw = box3d_center
-  Box = np.array([[-l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2],
-                  [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2],
-                  [0, 0, 0, 0, h, h, h, h]])
-
-  rotMat = np.array([
-      [np.cos(yaw), -np.sin(yaw), 0.0],
-      [np.sin(yaw), np.cos(yaw), 0.0],
-      [0.0, 0.0, 1.0]])
-
-  velo_box = np.dot(rotMat, Box)
-  cornerPosInVelo = velo_box + np.tile(np.array([x, y, z]), (8, 1)).T
-  box3d_corner = cornerPosInVelo.transpose()
-
-  return box3d_corner.astype(np.float32)
-
-
-if __name__ == '__main__':
-  heatmap = np.zeros((96, 320))
-
-  h, w = 40, 50
-  radius = compute_radius((h, w))
-  radius = max(0, int(radius))
-  print(f'h: {h}, w: {w}, radius: {radius:.2f}, sigma: {(2 * radius + 1) / 6.:.2f}')
-  gen_hm_radius(heatmap, center=(200, 50), radius=radius)
-  while True:
-    cv2.imshow('heatmap', heatmap)
-    # Press Esc to exit
-    if cv2.waitKey(0) & 0xff == 27:
-      break
-  max_pos = np.unravel_index(heatmap.argmax(), shape=heatmap.shape)
-  print(f'max_pos: {max_pos}')
+  def camera_to_lidar(self, p):
+    if self.c2l is None:
+      p = c2l_mat @ p
+    else:
+      p = self.c2l @ p
+    return p[:3]
