@@ -42,7 +42,7 @@ class frame():
     self.pos = pos_arr[in_range]
 
     # Initialize the BEV Maps: 0=>base; 1=>height; 2:density
-    self.bev = np.zeros((3, kitti_cfg.W, kitti_cfg.H))
+    self.bev = np.zeros((kitti_cfg.W, kitti_cfg.H, 3))
 
   def set_grid(self, z_arr, gx, gy):
     b, h = z_arr.min(), z_arr.max()
@@ -54,9 +54,10 @@ class frame():
         h = z_arr[idx_arr[0]]
         cnt = idx_arr[0]
 
-    self.bev[0, gx, gy] = b
-    self.bev[1, gx, gy] = h
-    self.bev[2, gx, gy] = cnt * (gx*gx + (gy - kitti_cfg.H//2)**2)
+    self.bev[gx, gy, 0] = b
+    self.bev[gx, gy, 1] = h
+    # Normalizing the dist square
+    self.bev[gx, gy, 2] = cnt * (gx*gx + (gy - kitti_cfg.H/2)**2) * 2e-4
 
   @timer_func
   def set_bev_map(self):
@@ -74,7 +75,6 @@ class frame():
     # The last key in the sequence is used for the primary sort order, 
     # the second-to-last key for the secondary sort order, and so on.
     sorted_indices = np.lexsort((self.pos[:, 2], glb_idx))
-    
     i0 = 0
     self.pos = self.pos[sorted_indices]
     unique_idx, idx_counts = np.unique(glb_idx[sorted_indices], return_counts=True)
@@ -85,7 +85,6 @@ class frame():
 
       # Set the grid height and base
       self.set_grid(self.pos[i0:(i0+idx_counts[i]), 2], gx, gy)
-
       i0 += idx_counts[i]
 
 
@@ -138,7 +137,6 @@ class agents():
       obj = lines[5].strip().split(' ')[1:]
       V2C = np.eye(4)
       V2C[:3, :] = (np.array(obj, dtype=np.float32)).reshape(3, 4)
-
       self.c2l = np.linalg.inv(R0 @ V2C)
 
     for line in open(label_path, 'r'):
@@ -158,7 +156,6 @@ class agents():
       x, y, z = self.camera_to_lidar(np.array([x,y,z,1]))
       # yaw
       ry = float(line_parts[14])  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
-
       self.labels.append([cat_id, x, y, z, h, w, l, ry])
 
   def camera_to_lidar(self, p):
