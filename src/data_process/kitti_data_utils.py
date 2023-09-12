@@ -59,6 +59,7 @@ class frame():
     # Normalizing the dist square
     self.bev[gx, gy, 2] = cnt * (gx*gx + (gy - kitti_cfg.H/2)**2) * 2e-4
 
+
   @timer_func
   def set_bev_map(self):
     """
@@ -86,6 +87,10 @@ class frame():
       # Set the grid height and base
       self.set_grid(self.pos[i0:(i0+idx_counts[i]), 2], gx, gy)
       i0 += idx_counts[i]
+
+    # Reset the base shift
+    # base = self.bev[gx, gy, 0].min()
+    # self.bev[gx, gy, :2] -= base
 
 
 class agents():
