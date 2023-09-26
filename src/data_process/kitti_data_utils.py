@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-from util.timing import timer_func
+from utils.timing import timer_func
 import data_process.kitti_config as kitti_cfg
 
 # Default transform matrix from the camera to lidar
@@ -10,8 +10,7 @@ c2l_mat = kitti_cfg.Tr_velo_to_cam_inv @ kitti_cfg.R0_inv
 # BEV Image coordinates format
 def get_corners(x, y, w, l, yaw):
   bev_corners = np.zeros((4, 2), dtype=np.float32)
-  cos_yaw = np.cos(yaw)
-  sin_yaw = np.sin(yaw)
+  cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
 
   # front left
   bev_corners[0, 0] = x - 0.5 * w * cos_yaw - 0.5 * l * sin_yaw
@@ -60,7 +59,7 @@ class frame():
     self.bev[gx, gy, 2] = cnt * (gx*gx + (gy - kitti_cfg.H/2)**2) * 2e-4
 
 
-  @timer_func
+  # @timer_func
   def set_bev_map(self):
     """
     Return base_map, height_map and the counts map as a supervisor
@@ -169,3 +168,50 @@ class agents():
     else:
       p = self.c2l @ p
     return p[:3]
+
+def compute_radius(height, width, min_overlap=0.7):
+  a1 = 1
+  b1 = (height + width)
+  c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
+  sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
+  r1 = (b1 + sq1) / 2
+
+  a2 = 4
+  b2 = 2 * (height + width)
+  c2 = (1 - min_overlap) * width * height
+  sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
+  r2 = (b2 + sq2) / 2
+
+  a3 = 4 * min_overlap
+  b3 = -2 * min_overlap * (height + width)
+  c3 = (min_overlap - 1) * width * height
+  sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
+  r3 = (b3 + sq3) / 2
+
+  return min(r1, r2, r3)
+
+def gaussian2D(shape, sigma=1):
+  m, n = [(ss - 1.) / 2. for ss in shape]
+  y, x = np.ogrid[-m:m + 1, -n:n + 1]
+  h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
+  h[h < np.finfo(h.dtype).eps * h.max()] = 0
+
+  return h
+
+def gen_hm_radius(heatmap, center, radius, k=1):
+  diameter = 2 * radius + 1
+  gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+
+  x, y = int(center[0]), int(center[1])
+
+  height, width = heatmap.shape[0:2]
+
+  left, right = min(x, radius), min(width - x, radius + 1)
+  top, bottom = min(y, radius), min(height - y, radius + 1)
+
+  masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
+  masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+  if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
+    np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
+
+  return heatmap
