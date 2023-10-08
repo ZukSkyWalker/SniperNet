@@ -46,18 +46,21 @@ BEV_WIDTH = 608  # across y axis -25m ~ 25m
 BEV_HEIGHT = 608  # across x axis 0m ~ 50m
 DISCRETIZATION = (boundary["maxX"] - boundary["minX"]) / BEV_HEIGHT
 
+
+# Minimum ratio and number of points, used to determine the ground base
+min_ground_ratio = 1e-3
+min_ground_layer_pts = 30
+
+# Z gap to cut off the ceiling like points above targets
+max_z_gap = 0.4
+
+# If below the height, we simply include the points (any gap may be due to occlusion)
+sig_z_thresh = 1.2
+
+
 # maximum number of points per voxel
 T = 35
 
-# voxel size
-vd = 0.1  # z
-vh = 0.05  # y
-vw = 0.05  # x
-
-# voxel grid
-W = math.ceil(bound_size_x / vw)
-H = math.ceil(bound_size_y / vh)
-D = math.ceil(bound_size_z / vd)
 
 # Following parameters are calculated as an average from KITTI dataset for simplicity
 #####################################################################################

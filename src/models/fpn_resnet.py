@@ -45,7 +45,7 @@ class BasicBlock(nn.Module):
 		out = self.bn2(out)
 
 		if self.downsample is not None:
-				residual = self.downsample(x)
+			residual = self.downsample(x)
 
 		out += residual
 		out = self.relu(out)
@@ -117,47 +117,64 @@ class PoseResNet(nn.Module):
 				num_output = self.heads[head]
 				if head_conv > 0:
 					fc = nn.Sequential(
-							nn.Conv2d(fpn_c, head_conv, kernel_size=3, padding=1, bias=True),
-							nn.ReLU(inplace=True),
-							nn.Conv2d(head_conv, num_output, kernel_size=1, stride=1, padding=0))
+						nn.Conv2d(fpn_c, head_conv, kernel_size=3, padding=1, bias=True),
+						nn.ReLU(inplace=True),
+						nn.Conv2d(head_conv, num_output, kernel_size=1, stride=1, padding=0))
 				else:
 					fc = nn.Conv2d(in_channels=fpn_c, out_channels=num_output, kernel_size=1, stride=1, padding=0)
 
-				self.__setattr__('fpn{}_{}'.format(fpn_idx, head), fc)
+				self.__setattr__(f'fpn{fpn_idx}_{head}', fc)
 
 	def _make_layer(self, block, planes, blocks, stride=1):
 		downsample = None
 		if stride != 1 or self.inplanes != planes * block.expansion:
 			downsample = nn.Sequential(
-					nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-					nn.BatchNorm2d(planes * block.expansion, momentum=BN_MOMENTUM),
+				nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+				nn.BatchNorm2d(planes * block.expansion, momentum=BN_MOMENTUM),
 			)
 
 		layers = []
 		layers.append(block(self.inplanes, planes, stride, downsample))
 		self.inplanes = planes * block.expansion
-		for i in range(1, blocks):
+		for _ in range(1, blocks):
 			layers.append(block(self.inplanes, planes))
 
 		return nn.Sequential(*layers)
 
 	def forward(self, x):
 		_, _, input_h, input_w = x.size()
+
+		print("x shape: ", x.size())
+
+
 		hm_h, hm_w = input_h // 4, input_w // 4
 		x = self.conv1(x)
+		print("after conv1", x.size())
+		
 		x = self.bn1(x)
+		print("after bn1", x.size())
+
 		x = self.relu(x)
+		print("after relu", x.size())
+
 		x = self.maxpool(x)
+		print("after maxpool", x.size())
 
 		out_layer1 = self.layer1(x)
+		print("out_layer1 shape:", out_layer1.size())
+
 		out_layer2 = self.layer2(out_layer1)
+		print("out_layer2 shape:", out_layer2.size())
 
 		out_layer3 = self.layer3(out_layer2)
+		print("out_layer3 shape:", out_layer3.size())
 
 		out_layer4 = self.layer4(out_layer3)
+		print("out_layer4 shape:", out_layer4.size())
 
 		# up_level1: torch.Size([b, 512, 14, 14])
 		up_level1 = F.interpolate(out_layer4, scale_factor=2, mode='bilinear', align_corners=True)
+		print("up_layer1 shape:", up_level1.size(), "; out_layer3", out_layer3.size())
 
 		concat_level1 = torch.cat((up_level1, out_layer3), dim=1)
 		# up_level2: torch.Size([b, 256, 28, 28])

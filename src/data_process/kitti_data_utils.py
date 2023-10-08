@@ -2,7 +2,7 @@ import numpy as np
 import os
 
 from utils.timing import timer_func
-import data_process.kitti_config as kitti_cfg
+import config.kitti_config as kitti_cfg
 
 # Default transform matrix from the camera to lidar
 c2l_mat = kitti_cfg.Tr_velo_to_cam_inv @ kitti_cfg.R0_inv
@@ -41,7 +41,7 @@ class frame():
     self.pos = pos_arr[in_range]
 
     # Initialize the BEV Maps: 0=>base; 1=>height; 2:density
-    self.bev = np.zeros((kitti_cfg.W, kitti_cfg.H, 3))
+    self.bev = np.zeros((3, kitti_cfg.BEV_HEIGHT, kitti_cfg.BEV_WIDTH))
 
   def set_grid(self, z_arr, gx, gy):
     b, h = z_arr.min(), z_arr.max()
@@ -53,10 +53,10 @@ class frame():
         h = z_arr[idx_arr[0]]
         cnt = idx_arr[0]
 
-    self.bev[gx, gy, 0] = b
-    self.bev[gx, gy, 1] = h
+    self.bev[0, gx, gy] = b
+    self.bev[1, gx, gy] = h
     # Normalizing the dist square
-    self.bev[gx, gy, 2] = cnt * (gx*gx + (gy - kitti_cfg.H/2)**2) * 2e-4
+    self.bev[2, gx, gy] = cnt * (gx*gx + (gy - kitti_cfg.BEV_WIDTH/2)**2) * 2e-4
 
 
   # @timer_func
@@ -68,10 +68,10 @@ class frame():
     x, y = self.pos[:, 0], self.pos[:, 1]
 
     # Compute the grid indices for every point
-    idx_x = (x / kitti_cfg.vx).astype(np.int32)
-    idx_y = ((y - kitti_cfg.boundary['minY']) / kitti_cfg.vy).astype(np.int32)
+    idx_x = (x / kitti_cfg.DISCRETIZATION).astype(np.int32)
+    idx_y = ((y - kitti_cfg.boundary['minY']) / kitti_cfg.DISCRETIZATION).astype(np.int32)
 
-    glb_idx = idx_x * kitti_cfg.H + idx_y
+    glb_idx = idx_x * kitti_cfg.BEV_WIDTH + idx_y
     # The last key in the sequence is used for the primary sort order, 
     # the second-to-last key for the secondary sort order, and so on.
     sorted_indices = np.lexsort((self.pos[:, 2], glb_idx))
@@ -81,7 +81,7 @@ class frame():
 
     for i in range(len(unique_idx)):
       # Decode the grid index
-      gx, gy = divmod(unique_idx[i], kitti_cfg.H)
+      gx, gy = divmod(unique_idx[i], kitti_cfg.BEV_WIDTH)
 
       # Set the grid height and base
       self.set_grid(self.pos[i0:(i0+idx_counts[i]), 2], gx, gy)

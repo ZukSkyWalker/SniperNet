@@ -15,7 +15,7 @@ class KittiDataset(Dataset):
 		self.input_size = (configs["NX"], configs["NY"])
 
 		# The BEV is divided into hm_l * hm_w grids, every grid is supposed to be occupied by only one object
-		self.heatmap_size = 225, 225
+		self.heatmap_size = 152, 152
 
 		self.num_classes = configs["num_classes"]
 		self.max_objects = configs["max_objects"]
@@ -66,7 +66,6 @@ class KittiDataset(Dataset):
 													os.path.join(self.calib_dir, f"{sample_id:06d}.txt"))
 
 		metadatas = {'sample id': sample_id}
-
 		targets = self.build_targets(agt.labels, hflipped=False)
 
 		return metadatas, bev_map, targets
@@ -96,6 +95,9 @@ class KittiDataset(Dataset):
 		for k in range(num_objects):
 			# location (x, y, z) and dimension (w, l) in meters and lidar coordinates 
 			cls_id, x, y, z, h, w, l, yaw = labels[k]
+
+			# print("label info", cls_id, x, y, z, h, w, l, yaw)
+
 			cls_id = int(cls_id)
 			# Invert yaw angle
 			yaw = -yaw
@@ -118,7 +120,7 @@ class KittiDataset(Dataset):
 
 			center_int = center.astype(np.int32)
 			if cls_id < 0:
-				ignore_ids = [_ for _ in range(self.num_classes)] if cls_id == - 1 else [- cls_id - 2]
+				ignore_ids = [_ for _ in range(self.num_classes)] if cls_id == -1 else [-cls_id - 2]
 				# Consider to make mask ignore
 				for cls_ig in ignore_ids:
 					kitti_util.gen_hm_radius(hm_main_center[cls_ig], center_int, radius)
@@ -132,6 +134,9 @@ class KittiDataset(Dataset):
 
 			# targets for center offset
 			cen_offset[k] = center - center_int
+
+			print(f"label info: cls_id={cls_id}, at ({x:.2f}, {y:.2f}, {z:.2f}), h={h:.2f}, w={w:.2f}, l={l:.2f}, yaw={yaw:.2f}")
+			print(f"center_x = {center_x:.2f}; center_y = {center_y:.2f}")
 
 			# targets for dimension
 			dimension[k, 0] = h
@@ -152,13 +157,13 @@ class KittiDataset(Dataset):
 			obj_mask[k] = 1
 
 		targets = {
-				'hm_cen': hm_main_center,
-				'cen_offset': cen_offset,
-				'direction': direction,
-				'z_coor': z_coor,
-				'dim': dimension,
-				'indices_center': indices_center,
-				'obj_mask': obj_mask,
+			'hm_cen': hm_main_center,
+			'cen_offset': cen_offset,
+			'direction': direction,
+			'z_coor': z_coor,
+			'dim': dimension,
+			'indices_center': indices_center,
+			'obj_mask': obj_mask,
 		}
 
 		return targets
