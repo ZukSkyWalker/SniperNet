@@ -5,6 +5,7 @@ import os
 import plotly.graph_objects as go
 from enum import IntFlag
 import config.waymo_config as cnf
+from optparse import OptionParser
 
 from waymo_open_dataset.utils import frame_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
@@ -219,7 +220,7 @@ def get_frames(file_path):
 
 	return frm_list
 
-def save_frame(in_dir, out_path):
+def save_frames(in_dir, out_path, device):
 	for f in os.listdir(in_dir):
 		if not f.endswith('.tfrecord'):
 			continue
@@ -233,6 +234,30 @@ def save_frame(in_dir, out_path):
 		for data in tf.data.TFRecordDataset(in_dir+f, compression_type=''):
 			frm = open_dataset.Frame()
 			frm.ParseFromString(bytearray(data.numpy()))
-			frm_proc, labels = process_raw_frame(frm)
-			torch.save({'pos': frm_proc.pos, 'sn': frm_proc.sn_arr, 'cid': frm_proc.cids, 'cls_type': frm_proc.cls_type}, f'{out_path+f[:-9]}{idx}.pt')
+			# frm_proc, labels = process_raw_frame(frm)
+
+			bev = BEV(frm)
+			bev.build_targets()
+
+			torch.save({'bev': torch.from_numpy(bev.bev_map).to(device),
+							    'class_1hot': torch.from_numpy(bev.class_onehot).to(device),
+									'cxy_offset': torch.from_numpy(bev.cxy_offset).to(device),
+									'z_coor': torch.from_numpy(bev.z_coor).to(device),
+									'heading': torch.from_numpy(bev.heading).to(device),
+									'dimension': torch.from_numpy(bev.dimension).to(device)
+									}, f'{out_path+f[:-9]}{idx}.pt')
+
 			idx += 1
+
+if __name__ == "__main__":
+	parser = OptionParser()
+	parser.add_option("-i", "--in_dir", dest="in_dir", default="/run/user/1000/gvfs/smb-share:server=ct.local,share=share/Zukai/wm_data/tf_12/")
+	parser.add_option("-o", "--out_dir", dest="out_dir", default="/home/zukai/Data/WaymoData/pt12/")
+
+	(options, args) = parser.parse_args()
+
+	print(options.in_dir)
+	print(options.out_dir)
+
+	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	save_frames(options.in_dir, options.out_dir, device)
