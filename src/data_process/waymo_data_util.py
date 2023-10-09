@@ -165,8 +165,8 @@ class BEV():
 				rcy = d_y * cos_yaw - d_x * sin_yaw
 
 				# approximate covered area
-				cover_x = min(1, max(0, min(half_l - rcx+0.5, rcx+0.5 + half_l)))
-				cover_y = min(1, max(0, min(half_w - rcy+0.5, rcy+0.5 + half_w)))
+				cover_x = min(1, max(0, min(half_l - rcx+0.5, rcx+0.5+half_l)))
+				cover_y = min(1, max(0, min(half_w - rcy+0.5, rcy+0.5+half_w)))
 
 				cover_area = cover_x * cover_y
 				if cover_area < 1e-5:
