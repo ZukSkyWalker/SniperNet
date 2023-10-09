@@ -5,7 +5,6 @@ import os
 import plotly.graph_objects as go
 from enum import IntFlag
 import config.waymo_config as cnf
-from optparse import OptionParser
 
 from waymo_open_dataset.utils import frame_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
@@ -249,15 +248,3 @@ def save_frames(in_dir, out_path, device):
 
 			idx += 1
 
-if __name__ == "__main__":
-	parser = OptionParser()
-	parser.add_option("-i", "--in_dir", dest="in_dir", default="/run/user/1000/gvfs/smb-share:server=ct.local,share=share/Zukai/wm_data/tf_12/")
-	parser.add_option("-o", "--out_dir", dest="out_dir", default="/home/zukai/Data/WaymoData/pt12/")
-
-	(options, args) = parser.parse_args()
-
-	print(options.in_dir)
-	print(options.out_dir)
-
-	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-	save_frames(options.in_dir, options.out_dir, device)
