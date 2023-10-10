@@ -127,7 +127,7 @@ class BEV():
 
 	def lable_target(self, label):
 		box = label.box
-		class_id = max(label.type-1, 2)
+		class_id = min(label.type-1, 2)
 
 		# get the heading, make it within (-np.pi/2, np.pi/2)
 		yaw = box.heading
@@ -222,6 +222,10 @@ def get_frames(file_path):
 def save_frames(in_dir, out_path, device):
 	for f in os.listdir(in_dir):
 		if not f.endswith('.tfrecord'):
+			continue
+		
+		if os.path.exists(f'{out_path+f[:-9]}0.pt'):
+			# this file has been processed
 			continue
 
 		print("processing", f)
