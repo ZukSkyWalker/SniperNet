@@ -223,9 +223,6 @@ def save_frames(in_dir, out_path, device):
 	for f in os.listdir(in_dir):
 		if not f.endswith('.tfrecord'):
 			continue
-		
-		if os.path.exists(f'{out_path+f[:-9]}0.pt'):
-			continue
 
 		print("processing", f)
 		idx = 0
