@@ -1,7 +1,4 @@
-import numpy as np
 
-
-#####################################################################################
 boundary = {
   "minX": -80,
   "maxX": 80,
@@ -30,3 +27,6 @@ sig_z_thresh = 1.2
 
 # maximum number of points per voxel
 T = 35
+
+# max number of samples constraint: (-1 for no constraint, use everything we have)
+num_samples = -1
