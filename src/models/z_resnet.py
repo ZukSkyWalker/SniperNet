@@ -145,6 +145,6 @@ class ZResNet(nn.Module):
 
 def get_model():
 	model = ZResNet(BasicBlock, [2, 2, 2, 2],
-								 heads={'num_classes': 3, "cxy_offset": 2, "heading": 1, "z_coord": 1, "dim": 3}, head_conv=64)
+								 heads={'class_type': 3, "cxy_offset": 2, "heading": 1, "z_coord": 1, "dim": 3}, head_conv=64)
 	
 	return model

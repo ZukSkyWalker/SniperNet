@@ -6,10 +6,11 @@ import config.waymo_config as cnf
 
 
 class WaymoDataset(Dataset):
-	def __init__(self, dataset_dir, mode='train'):
+	def __init__(self, cfg, mode='train'):
 		assert mode in ['train', 'val', 'test'], f'Invalid mode: {mode}'
 		self.mode = mode
-		self.dataset_dir = dataset_dir + mode + '/'
+		self.device = torch.device(cfg["device"])
+		self.dataset_dir = cfg["dataset_dir"] + mode + '/'
 		self.file_list = os.listdir(self.dataset_dir)
 
 		if cnf.num_samples > 0:
@@ -20,4 +21,4 @@ class WaymoDataset(Dataset):
 		return self.num_samples
 
 	def __getitem__(self, index):
-		return torch.load(self.dataset_dir + self.file_list[index])
+		return torch.load(self.dataset_dir + self.file_list[index], map_location=self.device)

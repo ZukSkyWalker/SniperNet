@@ -84,7 +84,7 @@ def visualize_frame(frame):
 class BEV():
 	def __init__(self, frame) -> None:
 		points, self.labels = process_raw_frame(frame)
-		self.bev_map = np.zeros((3, cnf.BEV_HEIGHT, cnf.BEV_WIDTH))
+		self.bev_map = np.zeros((3, cnf.BEV_HEIGHT, cnf.BEV_WIDTH), dtype=np.float32)
 		
 		# boundary select
 		sel  = (points[:, 0] > cnf.boundary["minX"]) & (points[:, 0] < cnf.boundary["maxX"])
@@ -195,7 +195,7 @@ class BEV():
 		self.cxy_offset = np.zeros((2, self.hm_l, self.hm_w), dtype=np.float32)
 		self.z_coor = np.zeros((self.hm_l, self.hm_w), dtype=np.float32)
 		self.heading = np.zeros((self.hm_l, self.hm_w), dtype=np.float32)
-		self.dimension = np.zeros((3, self.hm_l, self.hm_w))
+		self.dimension = np.zeros((3, self.hm_l, self.hm_w), dtype=np.float32)
 
 		for lb in self.labels:
 			self.lable_target(lb)
@@ -240,6 +240,7 @@ def save_frames(in_dir, out_path, device):
 			bev.build_targets()
 
 			torch.save({'bev': torch.from_numpy(bev.bev_map).to(device),
+							 		'heat_map': torch.from_numpy(bev.heat_map).to(device),
 							    'class_1hot': torch.from_numpy(bev.class_onehot).to(device),
 									'cxy_offset': torch.from_numpy(bev.cxy_offset).to(device),
 									'z_coor': torch.from_numpy(bev.z_coor).to(device),
