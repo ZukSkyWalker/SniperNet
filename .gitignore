@@ -41,3 +41,7 @@ build/**
 **__pycache__**
 
 dataset/
+
+# Mac
+.DS_Store
+**/.DS_Store
